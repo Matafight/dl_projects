@@ -124,21 +124,19 @@ def train():
         print('herew')
         sess.run(tf.global_variables_initializer())
         start_step = 0
-
+        coord = tf.train.Coordinator()
+        threads = tf.train.start_queue_runners(sess=sess, coord=coord)
         print('===========================================================================')
-        start_time = time.time()
-        train_images_batch, train_labels_batch = sess.run([train_images,train_labels])
-        print('end reading files')
-        feed_dict = {endpoints['images']:train_images_batch,endpoints['labels']:train_labels_batch}
-        _,loss_val,train_summary,step = sess.run([endpoints['train_op'],endpoints['loss_sum'],endpoints['merged_summary_op'],endpoints['global_step']],feed_dict=feed_dict)
-        end_time = time.time()
-
-        #if step % FLAGS.eval_steps==1:
-        #    logger.info("=======Begin eval stage=======")
-        #    start_time = time.time()
-
-
-
+        try:
+            while not coord.should_stop():
+                start_time = time.time()
+                train_images_batch, train_labels_batch = sess.run([train_images,train_labels])
+                print('end reading files')
+                feed_dict = {endpoints['images']:train_images_batch,endpoints['labels']:train_labels_batch}
+                _,loss_val,train_summary,step = sess.run([endpoints['train_op'],endpoints['loss_sum'],endpoints['merged_summary_op'],endpoints['global_step']],feed_dict=feed_dict)
+                end_time = time.time()
+        except:
+            print('exception')
 
 
 

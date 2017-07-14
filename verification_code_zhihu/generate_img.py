@@ -72,13 +72,13 @@ class ImageChar():
 
 
 err_num = 0
-for i in range(1000):
+for i in range(100):
     try:
         ic = ImageChar(fontColor=(100,211, 90), size=(56,28), fontSize = 25)
         #num_flip = random.randint(3,6)
         num_flip = random.randint(0,2)
         char_list, num_flip_list = ic.randChinese(2, num_flip)
-        ic.save('../inputs/verification_code_imgs/test_dir/'+''.join(char_list)+'_'+''.join(str(i) for i in num_flip_list)+".jpeg")
+        ic.save('../inputs/verification_code_imgs/test_data/'+''.join(char_list)+'_'+''.join(str(i) for i in num_flip_list)+".jpeg")
     except Exception,e:
         err_num += 1
         print(str(Exception))
