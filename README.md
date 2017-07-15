@@ -23,7 +23,13 @@ activate python2
 
 # 使用TensorBoard做可视化
 
+需要在程序中添加如下代码,将图的信息存到文件中：
+```python
+#sess = tf.Session()
+train_writer = tf.summary.FileWriter('./logs',sess.graph)
+```
 tensorboard --logdir=logs
 
 这样写是错的:
 tensorboard --logdir='./logs'
+tensorboard --logdir = logs (连空格都不能加？目前我测试是这样的，至少当我加了空格之后tensorboard中的graphs就为空了，显示No graph definition files were found)
