@@ -7,6 +7,9 @@ import time
 
 logger = logging.getLogger('starting....')
 logger.setLevel(logging.INFO)
+ch = logging.StreamHandler()
+ch.setLevel(logging.INFO)
+logger.addHandler(ch)
 
 tf.app.flags.DEFINE_boolean('random_brightness',True,'whether to adjust brightness')
 tf.app.flags.DEFINE_integer('image_width',56,'the width of images')
@@ -131,6 +134,7 @@ def train():
         train_writer = tf.summary.FileWriter('./log',sess.graph)
         sess.run(tf.global_variables_initializer())
         
+        logger.info("training start.....")
 
         try:
             while not coord.should_stop():
@@ -143,7 +147,6 @@ def train():
                 end_time = time.time()
         except tf.errors.OutOfRangeError:
             logger.info('========training finished========')
-            print('========training finished=======')
         finally:
             coord.request_stop()
         coord.join(threads)
