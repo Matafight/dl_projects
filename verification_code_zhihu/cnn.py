@@ -19,8 +19,9 @@ tf.app.flags.DEFINE_string('checkpoint_dir','./checkpoint','the checkpoint dir')
 tf.app.flags.DEFINE_string('train_data_dir','../inputs/verification_code_imgs/train_data/','training data dir')
 tf.app.flags.DEFINE_string('test_data_dir','../inputs/verification_code_imgs/test_data/','testing data dir')
 tf.app.flags.DEFINE_boolean('restore',False,'whether to restore from checkpoint')
-tf.app.flags.DEFINE_integer('batch_size',128,'the batch_size during training')
+tf.app.flags.DEFINE_integer('batch_size',100,'the batch_size during training')
 tf.app.flags.DEFINE_string('mode','train','the run mode')
+tf.app.flags.DEFINE_integer('epoch',10,'number of epoch')
 FLAGS = tf.app.flags.FLAGS
 
 #数据迭代器
@@ -78,7 +79,8 @@ def network():
 
     kernel_2 = tf.get_variable('kernel_2',[5,5,32,32],tf.float32)
     conv_2 = tf.nn.conv2d(avg_pool_1,kernel_2,[1,1,1,1],padding = 'SAME')
-    avg_pool_2 = tf.nn.avg_pool(conv_2,[1,2,2,32],[1,1,1,1],padding = 'SAME')
+    #没懂 avg_pool的ksize为什么不能是[1,2,2,32],应该是可以的啊
+    avg_pool_2 = tf.nn.avg_pool(conv_2,[1,2,2,1],[1,1,1,1],padding = 'SAME')
     flatten = tf.contrib.layers.flatten(avg_pool_2)
     #activation_fn = tf.nn.relu
     fc1 = tf.contrib.layers.fully_connected(flatten,512,activation_fn=None)
@@ -117,26 +119,35 @@ def train():
     test_feeder = DataIterator(data_dir = FLAGS.test_data_dir)
     
     with tf.Session() as sess:
-        train_images,train_labels = train_feeder.input_pipeline(batch_size = FLAGS.batch_size)
-        test_images,test_labels = test_feeder.input_pipeline(batch_size = FLAGS.batch_size)
-        print("here1")
+        train_images,train_labels = train_feeder.input_pipeline(batch_size = FLAGS.batch_size,num_epochs = FLAGS.epoch)
+        test_images,test_labels = test_feeder.input_pipeline(batch_size = FLAGS.batch_size,num_epochs = FLAGS.epoch)
+        #num_epoches 这个参数需要通过tf.local_vairables_initializer()这个函数来初始化,而且必须要在定义网络之前？？
+        sess.run(tf.local_variables_initializer())
         endpoints = network()
-        print('herew')
-        sess.run(tf.global_variables_initializer())
         start_step = 0
         coord = tf.train.Coordinator()
         threads = tf.train.start_queue_runners(sess=sess, coord=coord)
-        print('===========================================================================')
+        #用于tensorboard可视化
+        train_writer = tf.summary.FileWriter('./log',sess.graph)
+        sess.run(tf.global_variables_initializer())
+        
+
         try:
             while not coord.should_stop():
                 start_time = time.time()
                 train_images_batch, train_labels_batch = sess.run([train_images,train_labels])
-                print('end reading files')
                 feed_dict = {endpoints['images']:train_images_batch,endpoints['labels']:train_labels_batch}
                 _,loss_val,train_summary,step = sess.run([endpoints['train_op'],endpoints['loss_sum'],endpoints['merged_summary_op'],endpoints['global_step']],feed_dict=feed_dict)
+                logger.info('loss_sum')
+                print(loss_val)
                 end_time = time.time()
-        except:
-            print('exception')
+        except tf.errors.OutOfRangeError:
+            logger.info('========training finished========')
+            print('========training finished=======')
+        finally:
+            coord.request_stop()
+        coord.join(threads)
+
 
 
 

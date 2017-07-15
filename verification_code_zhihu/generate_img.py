@@ -17,8 +17,8 @@ class RandomChar():
         body = random.randint(0xA, 0xF)
         tail = random.randint(0, 0xF)
         val = ( head << 8 ) | (body << 4) | tail
-        str = "%x" % val
-        return str.decode('hex').decode('gb2312')    
+        str2 = "%x" % val
+        return str2.decode('hex').decode('gb2312')
 
 class ImageChar():
     def __init__(self, fontColor = (0, 0, 0),
@@ -55,7 +55,7 @@ class ImageChar():
         start = 0
         num_flip_list = random.sample(range(num), num_flip)
         # logger.info('num flip list:{0}'.format(num_flip_list))
-        print 'num flip list:{0}'.format(num_flip_list)
+        print ('num flip list:{0}'.format(num_flip_list))
         char_list = []
         for i in range(0, num):
             char = RandomChar().GB2312()
@@ -78,9 +78,10 @@ for i in range(100):
         #num_flip = random.randint(3,6)
         num_flip = random.randint(0,2)
         char_list, num_flip_list = ic.randChinese(2, num_flip)
-        ic.save('../inputs/verification_code_imgs/test_data/'+''.join(char_list)+'_'+''.join(str(i) for i in num_flip_list)+".jpeg")
-    except Exception,e:
-        err_num += 1
-        print(str(Exception))
-        print(str(e))
+        #采用中文当作文件名貌似出了点问题，试试不用中文当文件名
+        #ic.save('../inputs/verification_code_imgs/train_data/'+''.join(char_list)+'_'+''.join(str(i) for i in num_flip_list)+".jpeg")
+        ic.save('../inputs/verification_code_imgs/test_data/'+'item'+str(i)+'_'+''.join(str(i) for i in num_flip_list)+".jpeg")
+    except:
+        err_num +=1
+        print("error!")
         continue
