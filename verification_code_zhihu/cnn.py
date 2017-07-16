@@ -18,7 +18,7 @@ tf.app.flags.DEFINE_integer('max_steps',10000,'the max training steps')
 #eval_step?
 tf.app.flags.DEFINE_integer('eval_steps',100,'the step num to eval')
 tf.app.flags.DEFINE_integer('save_steps',100,'the steps to save')
-tf.app.flags.DEFINE_string('checkpoint_dir','./checkpoint','the checkpoint dir')
+tf.app.flags.DEFINE_string('checkpoint_dir','./checkpoint/','the checkpoint dir')
 tf.app.flags.DEFINE_string('train_data_dir','../inputs/verification_code_imgs/train_data/','training data dir')
 tf.app.flags.DEFINE_string('test_data_dir','../inputs/verification_code_imgs/test_data/','testing data dir')
 tf.app.flags.DEFINE_boolean('restore',False,'whether to restore from checkpoint')
@@ -77,19 +77,17 @@ def network():
     endpoints = {}
     kernel_1 = tf.get_variable('kernel_1',[5,5,1,32],tf.float32)
     conv_1 = tf.nn.conv2d(images,kernel_1,[1,1,1,1],padding = 'SAME')
-
     avg_pool_1 = tf.nn.avg_pool(conv_1,[1,2,2,1],[1,1,1,1],padding='SAME')
-
     kernel_2 = tf.get_variable('kernel_2',[5,5,32,32],tf.float32)
     conv_2 = tf.nn.conv2d(avg_pool_1,kernel_2,[1,1,1,1],padding = 'SAME')
-    #没懂 avg_pool的ksize为什么不能是[1,2,2,32],应该是可以的啊
+    #avg_pool do not support max_pooling of depth
     avg_pool_2 = tf.nn.avg_pool(conv_2,[1,2,2,1],[1,1,1,1],padding = 'SAME')
     flatten = tf.contrib.layers.flatten(avg_pool_2)
     #activation_fn = tf.nn.relu
     fc1 = tf.contrib.layers.fully_connected(flatten,512,activation_fn=None)
     out0 = tf.contrib.layers.fully_connected(fc1,2,activation_fn = None)
     out1 = tf.contrib.layers.fully_connected(fc1,2,activation_fn = None)
-    #global_step ??
+    #global_step is used as a counter to count the times that adamoptimizer has beed called,so, it doesn't mean the num_epochs
     global_step = tf.Variable(initial_value = 0)
     out0_argmax = tf.expand_dims(tf.argmax(out0,1),1)
     out1_argmax = tf.expand_dims(tf.argmax(out1,1),1)
@@ -101,7 +99,7 @@ def network():
     loss_sum = tf.reduce_sum(losses)
     train_op = tf.train.AdamOptimizer(learning_rate=0.0001).minimize(loss_sum,global_step = global_step)
     accuracy = tf.reduce_mean(tf.cast(tf.reduce_all(tf.equal(out_final,labels),axis=1),tf.float32))
-    #summary.scalar ??
+    #summary.scalar 
     tf.summary.scalar('loss_sum',loss_sum)
     tf.summary.scalar('accuracy',accuracy)
     merged_summary_op = tf.summary.merge_all()
@@ -115,6 +113,10 @@ def network():
     endpoints['merged_summary_op'] = merged_summary_op
     endpoints['out_final'] = out_final
     endpoints['out_score'] = out_score
+    #the following code is used for test
+    print(out0_argmax.get_shape())
+    print(tf.argmax(out0,1).get_shape())
+    print(out0.get_shape())
     return endpoints
 
 def train():
@@ -123,28 +125,53 @@ def train():
     
     with tf.Session() as sess:
         train_images,train_labels = train_feeder.input_pipeline(batch_size = FLAGS.batch_size,num_epochs = FLAGS.epoch)
-        test_images,test_labels = test_feeder.input_pipeline(batch_size = FLAGS.batch_size,num_epochs = FLAGS.epoch)
-        #num_epoches 这个参数需要通过tf.local_vairables_initializer()这个函数来初始化,而且必须要在定义网络之前？？
-        sess.run(tf.local_variables_initializer())
+        test_images,test_labels = test_feeder.input_pipeline(batch_size = FLAGS.batch_size)
+        #num_epoches 这个参数需要通过tf.local_vairables_initializer()这个函数来初始化
         endpoints = network()
+        sess.run(tf.global_variables_initializer())
+        sess.run(tf.local_variables_initializer())
+        
+        saver = tf.train.Saver()
         start_step = 0
         coord = tf.train.Coordinator()
         threads = tf.train.start_queue_runners(sess=sess, coord=coord)
         #用于tensorboard可视化
         train_writer = tf.summary.FileWriter('./log',sess.graph)
-        sess.run(tf.global_variables_initializer())
-        
         logger.info("training start.....")
 
+        #checkpoint is used to save and restore models from local dick 
+        if FLAGS.restore:
+            ckpt = tf.train.latest_checkpoint(FLAGS.checkpoint_dir)
+            if ckpt:
+                saver.restore(sess,ckpt)
+                print("restoring from the checkpint {0}".format(ckpt))
         try:
             while not coord.should_stop():
                 start_time = time.time()
                 train_images_batch, train_labels_batch = sess.run([train_images,train_labels])
                 feed_dict = {endpoints['images']:train_images_batch,endpoints['labels']:train_labels_batch}
                 _,loss_val,train_summary,step = sess.run([endpoints['train_op'],endpoints['loss_sum'],endpoints['merged_summary_op'],endpoints['global_step']],feed_dict=feed_dict)
-                logger.info('loss_sum')
-                print(loss_val)
+                #evaluate performance on the test data
+                #batch size of test data should be just the size of test data
+                #test_images
+                #feed_dict_test = {endpoints['image']:test}
+                logger.info("[train] the step {0} takes {1} loss {2}".format(step,time.time()-start_time,loss_val))
                 end_time = time.time()
+                if step%FLAGS.eval_steps == 0:
+                    logger.info("========begin eval stage========")
+                    start_time = time.time()
+                    test_images_batch,test_labels_batch = sess.run([test_images,test_labels])
+                    feed_dict_test = {endpoints['images']:test_image_batch,endpoints['labels']:test_labels_batch}
+                    #test_summary 可能是用来保存到tensorborad中分析的数据？
+                    accuracy,test_summary = sess.run([endpoints['accuracy'],endpoints['merged_summary_op']],feed_dict= feed_dict_test)
+                    end_time = time.time()
+                    logger.info('[test] the step {0}, accuracy {1}, spend time {2}'.format(step,accuracy,end_time-start_time))
+
+
+
+                if step%FLAGS.save_steps == 0:
+                    logger.info("save model in step {0}".format(step))
+                    saver.save(sess,os.path.join(FLAGS.checkpoint_dir,'my_model'),global_step = endpoints['global_step'])
         except tf.errors.OutOfRangeError:
             logger.info('========training finished========')
         finally:
