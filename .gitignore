@@ -1,2 +1,5 @@
 verification_code_imgs/
 inputs/*
+log/
+.ipynb_checkpoints/
+
