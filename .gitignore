@@ -2,3 +2,6 @@ verification_code_imgs/
 inputs/*
 log/
 .ipynb_checkpoints/
+ml-100k/
+checkpoint/
+graph.pbtxt
