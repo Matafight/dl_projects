@@ -5,3 +5,5 @@ log/
 ml-100k/
 checkpoint/
 graph.pbtxt
+CHECKPOINTS/
+__pycache__/
