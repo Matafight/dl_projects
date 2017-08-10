@@ -19,6 +19,17 @@ class deep_fm:
     k = 0
     hidden1 = 3
     hidden2 = 3
+    train_X = None
+    test_X = None
+    train_y = None
+    test_y = None 
+    train_user_onehot = None
+    train_movie_onehot = None
+    test_user_onehot = None
+    test_movie_onehot = None
+    batch_size = None
+
+
 
     def __init__(self,train_path=None,test_path = None):
         self.train_path = train_path
@@ -28,8 +39,25 @@ class deep_fm:
     def read_data(self):
         train_data = np.loadtxt(self.train_path)
         test_data = np.loadtxt(self.test_path)
+        self.batch_size = train_data.shape[0]
+        print(train_data.shape)
+        total_data = np.concatenate([train_data,test_data],axis=0)
+        self.movie_dim = np.amax(total_data[:,0])
+        #self.user_dim = np.amax(total_data[:,1])
+        self.user_dim = self.movie_dim
+
+        self.train_X = train_data[:,0:2]
+        self.test_X = test_data[:,0:2]
+        self.train_y = train_data[:,2].reshape(train_data.shape[0],1)
+        self.test_y = test_data[:,2].reshape(test_data.shape[0],1)
+        
+        self.train_user_onehot = tf.one_hot(indices = self.train_X[:,0],depth = self.user_dim)
+        self.train_movie_onehot = tf.one_hot(indices=self.train_X[:,1],depth = self.movie_dim)
+        self.test_user_onehot = tf.one_hot(indices = self.test_X[:,0],depth = self.user_dim)
+        self.test_movie_onehot = tf.one_hot(indices=self.test_X[:,1],depth = self.movie_dim)
+
+        #one hot 编码，分别存储user 和 movie
         #分别得到电影和用户的最大值，作为input dimension
-        pass
 
     
     def dtype(self):
@@ -38,8 +66,8 @@ class deep_fm:
     #有多个独立的embedding layer
     def embedding_layer(self):
         #fir dim refers to batch_size
-        movie_input = tf.placeholder(dtype = self.dtype(),shape=[None,self.movie_dim],name='movie_embedding')
-        user_input = tf.placeholder(dtype=self.dtype(),shape=[None,self.user_dim],name = 'user_embedding')
+        movie_input = tf.placeholder(dtype = self.dtype(),shape=[self.batch_size,self.movie_dim],name='movie_embedding')
+        user_input = tf.placeholder(dtype=self.dtype(),shape=[self.batch_size,self.user_dim],name = 'user_embedding')
         #var_movie = tf.get_variable(name='var_movie_embedding',shape=[self.movie_dim,self.k],dtype=self.dtype())
         #var_user = tf.get_variable(name='var_user_embedding',shape=[self.user_dim,self.k],dtype = self.dtype())
 
@@ -62,7 +90,7 @@ class deep_fm:
         # I need to inspect the shape of ele_product
         #out_fm = tf.reduce_sum(ele_product,axis=1) + tf.reduce_sum(movie_input)+tf.reduce_sum(user_input)
         #return out_fm
-        return total_bias,ele_product,
+        return total_bias,ele_product,movie_input,user_input
     
     def deep_network(self):
         movie_input,user_input,fc_movie,fc_user = self.embedding_layer()
@@ -80,20 +108,61 @@ class deep_fm:
         #deep_layer = tf.contrib.layers.fully_connected(out_third,num_outputs = 1,activation = tf.nn.sigmoid)
         return out_third
     def combine_network(self):
-        total_bias,ele_product = self.fm_network()
+        total_bias,ele_product,movie_input,user_input = self.fm_network()
         deep_layer = self.deep_network()
-        #get_shape(total_bias)
-        #get_shape(ele_product)
-        #get_shape(deep_layer)
-        comb = tf.concat([total_bias,ele_product,deep_layer],axis=1)
+        #comb = tf.concat([total_bias,ele_product,deep_layer],axis=1)
+        comb = deep_layer
+        output = tf.contrib.layers.fully_connected(comb,num_outputs = 1,activation_fn = None)
+        #当作一个回归问题，
+        y = tf.placeholder(dtype = self.dtype(),shape=[None,1],name='labels')
+        loss = tf.losses.mean_squared_error(labels = y,predictions = output)
+        #获取trainable变量的梯度，并传入update中
+        trainable_v = tf.trainable_variables()
+        opt = tf.train.GradientDescentOptimizer(learning_rate=0.1)   
+        grads_and_vars = opt.compute_gradients(loss,trainable_v)       
+        ret_opt = opt.apply_gradients(grads_and_vars)
+
+        endpoints={}
+        endpoints['movie_input'] = movie_input
+        endpoints['user_input'] = user_input
+        endpoints['labels'] = y
+        endpoints['losses'] = loss
+        endpoints['train_op'] = ret_opt
+        return endpoints
 
     def run(self):
-        self.combine_network()
+        #准备数据
+        self.read_data()
+        endpoints = self.combine_network()
+
+        with tf.Session() as sess:
+            #作为测试，现在每次都feed进去所有的数据
+            #train_movie_onehot = tf.expand_dims(self.train_movie_onehot,-1)
+            #train_user_onehot = tf.expand_dims(self.train_user_onehot,-1)
+            sess.run(tf.global_variables_initializer())     
+            sess.run(tf.local_variables_initializer())
+            train_movie_onehot = self.train_movie_onehot
+            train_user_onehot = self.train_user_onehot
+            train_movie_onehot = tf.cast(train_movie_onehot,tf.float32)
+            movie_input = sess.run(train_movie_onehot)
+            print('movie shape:')
+            print(movie_input.shape)
+            user_input = sess.run(train_user_onehot)
+            print(user_input.shape)
+            feed_dict_loc = {endpoints['movie_input']:movie_input,endpoints['user_input']:movie_input,endpoints['labels']:self.train_y}
+            #_,losses = sess.run([endpoints['train_op'],endpoints['losses']],feed_dict=feed_dict_loc)
+            #losses = sess.run(endpoints['losses'],feed_dict=feed_dict_loc)
+            endpoints['losses'].eval(feed_dict = feed_dict_loc)
+
+
+
 
 
 
 if __name__=='__main__':
-    fm = deep_fm()
+    train_path = 'u1.base.txt'
+    test_path = 'u1.test.txt'
+    fm = deep_fm(train_path,test_path)
     fm.run()
 
 
