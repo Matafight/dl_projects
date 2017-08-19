@@ -33,3 +33,5 @@ tensorboard --logdir=logs
 这样写是错的:
 tensorboard --logdir='./logs'
 tensorboard --logdir = logs (连空格都不能加？目前我测试是这样的，至少当我加了空格之后tensorboard中的graphs就为空了，显示No graph definition files were found)
+
+#
