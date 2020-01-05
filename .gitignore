@@ -7,3 +7,9 @@ checkpoint/
 graph.pbtxt
 CHECKPOINTS/
 __pycache__/
+data/
+test/
+.vs/
+.vscode/
+err_plots/
+.idea/
